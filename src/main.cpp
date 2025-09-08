@@ -18,6 +18,9 @@ private:
 };
 
 int main(int, char *[]) {
+    int width = 320;
+    int height = 200;
+    int scale = 4;
     SDL_Window *window;
     SDL_Renderer *renderer;
     SDL_Event event;
@@ -27,16 +30,18 @@ int main(int, char *[]) {
         return 3;
     }
 
-    if (!SDL_CreateWindowAndRenderer("Pitfall", 320, 200, SDL_WINDOW_OPENGL, &window, &renderer)) {
+    if (!SDL_CreateWindowAndRenderer("Pitfall", width * scale, height * scale, SDL_WINDOW_OPENGL, &window, &renderer)) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't create window and renderer: %s", SDL_GetError());
         return 3;
     }
+    SDL_SetRenderScale(renderer, scale, scale);
 
     SDL_Surface *surface = SDL_LoadBMP("../assets/spritesheet.bmp");
     if (!surface) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't create surface from image: %s", SDL_GetError());
         return 3;
     }
+    SDL_SetSurfaceColorKey(surface, true, SDL_MapSurfaceRGB(surface, 255, 0, 255));
 
     SDL_Texture *spritesheet = SDL_CreateTextureFromSurface(renderer, surface);
     if (!spritesheet) {
@@ -44,8 +49,9 @@ int main(int, char *[]) {
         return 3;
     }
     SDL_DestroySurface(surface);
+    SDL_SetTextureScaleMode(spritesheet, SDL_SCALEMODE_NEAREST);
 
-    const Sprite player(spritesheet, 1, 11, 16, 32);
+    const Sprite player(spritesheet, 0, 0, 16, 16);
 
     while (true) {
         SDL_PollEvent(&event);
@@ -54,7 +60,7 @@ int main(int, char *[]) {
         };
 
 
-        SDL_SetRenderDrawColor(renderer, 0, 100, 0, 0);
+        SDL_SetRenderDrawColor(renderer, 0, 0, 50, 0);
         SDL_RenderClear(renderer);
         player.draw(renderer, 10, 10);
         SDL_RenderPresent(renderer);
