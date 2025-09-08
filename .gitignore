@@ -1,5 +1,2 @@
-Debug
-pitfall.vcxproj.user
-.vs
-*.o
-pitfall
+cmake-build-debug
+.idea
