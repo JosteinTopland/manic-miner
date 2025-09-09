@@ -1,29 +1,64 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
 
-class Sprite {
+class Entity {
 public:
-    Sprite(SDL_Texture *tex, const float sx, const float sy, const float sw, const float sh)
-        : texture(tex), src{sx, sy, sw, sh} {
+    Entity(SDL_Texture *tex, const float sx, const float sy, const float sw, const float sh, const int frames)
+        : sprite_sheet(tex), sprite_rect{sx, sy, sw, sh}, frame_count(frames), frame(0) {
     }
 
-    void draw(SDL_Renderer *renderer, const float x, const float y) const {
+    void draw(SDL_Renderer *renderer) {
+        float src_x = sprite_rect.x + static_cast<float>(frame) * sprite_rect.w;
+        if (direction == Direction::Left) {
+            src_x += sprite_rect.w * static_cast<float>(frame_count);
+        }
+        const SDL_FRect src = {
+            src_x,
+            sprite_rect.y,
+            sprite_rect.w,
+            sprite_rect.h
+        };
         const SDL_FRect dst = {x, y, src.w, src.h};
-        SDL_RenderTexture(renderer, texture, &src, &dst);
+        SDL_RenderTexture(renderer, sprite_sheet, &src, &dst);
+        if (state == State::Walking) {
+            frame = (frame + 1) % frame_count;
+        }
+    }
+
+    void move(const float _x) {
+        state = State::Walking;
+        direction = _x < 0 ? Direction::Left : Direction::Right;
+        x += _x;
+    }
+
+    void stop() {
+        state = State::Idle;
+        //frame = 0;
     }
 
 private:
-    SDL_Texture *texture;
-    SDL_FRect src;
+    enum class Direction { Left, Right };
+
+    enum class State { Idle, Walking };
+
+    float x = 100;
+    float y = 100;
+    float speed = 1.0f;
+
+    SDL_Texture *sprite_sheet;
+    SDL_FRect sprite_rect;
+    int frame_count;
+    int frame;
+    Direction direction = Direction::Left;
+    State state = State::Idle;
 };
 
 int main(int, char *[]) {
-    int width = 320;
-    int height = 200;
-    int scale = 4;
+    const int width = 320;
+    const int height = 200;
+    const int scale = 4;
     SDL_Window *window;
     SDL_Renderer *renderer;
-    SDL_Event event;
 
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't initialize SDL: %s", SDL_GetError());
@@ -51,21 +86,31 @@ int main(int, char *[]) {
     SDL_DestroySurface(surface);
     SDL_SetTextureScaleMode(spritesheet, SDL_SCALEMODE_NEAREST);
 
-    const Sprite player(spritesheet, 0, 0, 16, 16);
+    Entity player(spritesheet, 0, 0, 16, 16, 4);
 
-    while (true) {
-        SDL_PollEvent(&event);
-        if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_Q) {
-            break;
-        };
+    bool run = true;
+    SDL_Event event;
+    while (run) {
+        while (SDL_PollEvent(&event)) {
+            if (event.type == SDL_EVENT_QUIT ||
+                event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_Q) {
+                run = false;
+            }
+            if (event.type == SDL_EVENT_KEY_UP) {
+                player.stop();
+            }
+        }
 
+        const bool *key_states = SDL_GetKeyboardState(nullptr);
+        if (key_states[SDL_SCANCODE_LEFT]) player.move(-1);
+        if (key_states[SDL_SCANCODE_RIGHT]) player.move(1);
 
         SDL_SetRenderDrawColor(renderer, 0, 0, 50, 0);
         SDL_RenderClear(renderer);
-        player.draw(renderer, 10, 10);
+        player.draw(renderer);
         SDL_RenderPresent(renderer);
 
-        SDL_Delay(100);
+        SDL_Delay(50);
     }
 
     SDL_DestroyTexture(spritesheet);
