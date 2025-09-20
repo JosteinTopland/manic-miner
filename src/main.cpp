@@ -7,7 +7,7 @@ public:
         : sprite_sheet(tex), sprite_rect{sx, sy, sw, sh}, frame_count(frames), frame(0) {
     }
 
-    void draw(SDL_Renderer *renderer) {
+    void render(SDL_Renderer *renderer) const {
         float src_x = sprite_rect.x + static_cast<float>(frame) * sprite_rect.w;
         if (direction == Direction::Left) {
             src_x += sprite_rect.w * static_cast<float>(frame_count);
@@ -20,26 +20,41 @@ public:
         };
         const SDL_FRect dst = {x, y, src.w, src.h};
         SDL_RenderTexture(renderer, sprite_sheet, &src, &dst);
-        if (state == State::Walking) {
-            frame = (frame + 1) % frame_count;
-        }
     }
-
     void move(const float _x) {
+        if (state == State::Jumping) return;
         state = State::Walking;
         direction = _x < 0 ? Direction::Left : Direction::Right;
         x += _x;
     }
-
+    void jump() {
+        if (state == State::Jumping) return;
+        state = State::Jumping;
+        jump_frame = 0;
+    }
     void stop() {
+        if (state == State::Jumping) return;
         state = State::Idle;
-        //frame = 0;
+    }
+    void update() {
+        if (state == State::Walking) {
+            frame = (frame + 1) % frame_count;
+        }
+        if (state == State::Jumping) {
+            jump_frame++;
+            if (jump_frame <= 10) y -= 1;
+            else if (jump_frame <= 20) y += 1;
+            else {
+                state = State::Idle;
+                jump_frame = 0;
+            }
+        }
     }
 
 private:
     enum class Direction { Left, Right };
 
-    enum class State { Idle, Walking };
+    enum class State { Idle = 0, Walking = 1, Jumping = 2 };
 
     float x = 100;
     float y = 100;
@@ -49,14 +64,15 @@ private:
     SDL_FRect sprite_rect;
     int frame_count;
     int frame;
+    int jump_frame = 0;
     Direction direction = Direction::Left;
     State state = State::Idle;
 };
 
-int main(int, char *[]) {
+int main(int arc, char *argv[]) {
     const int width = 320;
     const int height = 200;
-    const int scale = 4;
+    const int scale = 5;
     SDL_Window *window;
     SDL_Renderer *renderer;
 
@@ -71,6 +87,7 @@ int main(int, char *[]) {
     }
     SDL_SetRenderScale(renderer, scale, scale);
 
+    // load gfx
     SDL_Surface *surface = SDL_LoadBMP("../assets/spritesheet.bmp");
     if (!surface) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't create surface from image: %s", SDL_GetError());
@@ -85,6 +102,8 @@ int main(int, char *[]) {
     }
     SDL_DestroySurface(surface);
     SDL_SetTextureScaleMode(spritesheet, SDL_SCALEMODE_NEAREST);
+
+    // load snd
 
     Entity player(spritesheet, 0, 0, 16, 16, 4);
 
@@ -104,10 +123,12 @@ int main(int, char *[]) {
         const bool *key_states = SDL_GetKeyboardState(nullptr);
         if (key_states[SDL_SCANCODE_LEFT]) player.move(-1);
         if (key_states[SDL_SCANCODE_RIGHT]) player.move(1);
+        if (key_states[SDL_SCANCODE_UP]) player.jump();
 
         SDL_SetRenderDrawColor(renderer, 0, 0, 50, 0);
         SDL_RenderClear(renderer);
-        player.draw(renderer);
+        player.update();
+        player.render(renderer);
         SDL_RenderPresent(renderer);
 
         SDL_Delay(50);
