@@ -1,5 +1,5 @@
 #include <SDL2/SDL.h>
-#include <SDL2/SDL_mixer.h>
+#include <SDL_mixer.h>
 
 class Entity {
 public:
@@ -21,21 +21,25 @@ public:
         const SDL_Rect dst = {x, y, src.w, src.h};
         SDL_RenderCopy(renderer, sprite_sheet, &src, &dst);
     }
+
     void move(const int _x) {
         if (state & State::Jumping) return;
         x += _x;
         direction = _x < 0 ? Direction::Left : Direction::Right;
         state |= State::Walking;
     }
+
     void jump() {
         if (state & State::Jumping) return;
         state |= State::Jumping;
         jump_frame = 0;
     }
+
     void stop() {
         if (state == State::Jumping) return;
         state &= ~State::Walking;
     }
+
     void update() {
         if (state & State::Walking) {
             frame = (frame + 1) % frame_count;
@@ -72,9 +76,9 @@ private:
 };
 
 int main(int arc, char *argv[]) {
-    const int width = 320;
-    const int height = 200;
-    const int scale = 5;
+    constexpr int width = 320;
+    constexpr int height = 200;
+    constexpr int scale = 5;
     SDL_Window *window;
     SDL_Renderer *renderer;
 
