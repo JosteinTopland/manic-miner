@@ -1,51 +1,53 @@
-#include <SDL3/SDL.h>
-#include <SDL3/SDL_main.h>
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_mixer.h>
 
 class Entity {
 public:
-    Entity(SDL_Texture *tex, const float sx, const float sy, const float sw, const float sh, const int frames)
+    Entity(SDL_Texture *tex, const int sx, const int sy, const int sw, const int sh, const int frames)
         : sprite_sheet(tex), sprite_rect{sx, sy, sw, sh}, frame_count(frames), frame(0) {
     }
 
     void render(SDL_Renderer *renderer) const {
-        float src_x = sprite_rect.x + static_cast<float>(frame) * sprite_rect.w;
+        int src_x = sprite_rect.x + frame * sprite_rect.w;
         if (direction == Direction::Left) {
-            src_x += sprite_rect.w * static_cast<float>(frame_count);
+            src_x += sprite_rect.w * frame_count;
         }
-        const SDL_FRect src = {
+        const SDL_Rect src = {
             src_x,
             sprite_rect.y,
             sprite_rect.w,
             sprite_rect.h
         };
-        const SDL_FRect dst = {x, y, src.w, src.h};
-        SDL_RenderTexture(renderer, sprite_sheet, &src, &dst);
+        const SDL_Rect dst = {x, y, src.w, src.h};
+        SDL_RenderCopy(renderer, sprite_sheet, &src, &dst);
     }
-    void move(const float _x) {
-        if (state == State::Jumping) return;
-        state = State::Walking;
-        direction = _x < 0 ? Direction::Left : Direction::Right;
+    void move(const int _x) {
+        if (state & State::Jumping) return;
         x += _x;
+        direction = _x < 0 ? Direction::Left : Direction::Right;
+        state |= State::Walking;
     }
     void jump() {
-        if (state == State::Jumping) return;
-        state = State::Jumping;
+        if (state & State::Jumping) return;
+        state |= State::Jumping;
         jump_frame = 0;
     }
     void stop() {
         if (state == State::Jumping) return;
-        state = State::Idle;
+        state &= ~State::Walking;
     }
     void update() {
-        if (state == State::Walking) {
+        if (state & State::Walking) {
             frame = (frame + 1) % frame_count;
+        } else {
+            frame = 0;
         }
-        if (state == State::Jumping) {
+        if (state & State::Jumping) {
             jump_frame++;
             if (jump_frame <= 10) y -= 1;
             else if (jump_frame <= 20) y += 1;
             else {
-                state = State::Idle;
+                state &= ~State::Jumping;
                 jump_frame = 0;
             }
         }
@@ -54,19 +56,19 @@ public:
 private:
     enum class Direction { Left, Right };
 
-    enum class State { Idle = 0, Walking = 1, Jumping = 2 };
+    enum State { Idle = 0, Walking = 1, Jumping = 2 };
 
-    float x = 100;
-    float y = 100;
-    float speed = 1.0f;
+    int x = 100;
+    int y = 100;
+    int speed = 1.0f;
 
     SDL_Texture *sprite_sheet;
-    SDL_FRect sprite_rect;
+    SDL_Rect sprite_rect;
     int frame_count;
     int frame;
     int jump_frame = 0;
     Direction direction = Direction::Left;
-    State state = State::Idle;
+    int state = State::Idle;
 };
 
 int main(int arc, char *argv[]) {
@@ -76,16 +78,17 @@ int main(int arc, char *argv[]) {
     SDL_Window *window;
     SDL_Renderer *renderer;
 
-    if (!SDL_Init(SDL_INIT_VIDEO)) {
+    if (SDL_Init(SDL_INIT_VIDEO) != 0) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't initialize SDL: %s", SDL_GetError());
-        return 3;
+        return 1;
     }
 
-    if (!SDL_CreateWindowAndRenderer("Pitfall", width * scale, height * scale, SDL_WINDOW_OPENGL, &window, &renderer)) {
+    if (SDL_CreateWindowAndRenderer(width * scale, height * scale, SDL_WINDOW_OPENGL, &window, &renderer) != 0) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't create window and renderer: %s", SDL_GetError());
-        return 3;
+        return 1;
     }
-    SDL_SetRenderScale(renderer, scale, scale);
+    SDL_SetWindowTitle(window, "Manic Miner");
+    SDL_RenderSetScale(renderer, scale, scale);
 
     // load gfx
     SDL_Surface *surface = SDL_LoadBMP("../assets/spritesheet.bmp");
@@ -93,37 +96,42 @@ int main(int arc, char *argv[]) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't create surface from image: %s", SDL_GetError());
         return 3;
     }
-    SDL_SetSurfaceColorKey(surface, true, SDL_MapSurfaceRGB(surface, 255, 0, 255));
+    SDL_SetColorKey(surface, true, SDL_MapRGB(surface->format, 255, 0, 255));
 
     SDL_Texture *spritesheet = SDL_CreateTextureFromSurface(renderer, surface);
     if (!spritesheet) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Couldn't create texture from surface: %s", SDL_GetError());
         return 3;
     }
-    SDL_DestroySurface(surface);
-    SDL_SetTextureScaleMode(spritesheet, SDL_SCALEMODE_NEAREST);
+    SDL_FreeSurface(surface);
+    SDL_SetTextureScaleMode(spritesheet, SDL_ScaleModeNearest);
 
     // load snd
+    Mix_OpenAudio(44100, AUDIO_S16SYS, 2, 512);
+    Mix_Chunk *snd = Mix_LoadWAV("../assets/CHIMES.WAV");
 
     Entity player(spritesheet, 0, 0, 16, 16, 4);
 
     bool run = true;
-    SDL_Event event;
     while (run) {
+        SDL_Event event;
         while (SDL_PollEvent(&event)) {
-            if (event.type == SDL_EVENT_QUIT ||
-                event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_Q) {
+            if (event.type == SDL_QUIT ||
+                event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_q) {
                 run = false;
             }
-            if (event.type == SDL_EVENT_KEY_UP) {
+            if (event.type == SDL_KEYUP) {
                 player.stop();
             }
         }
 
-        const bool *key_states = SDL_GetKeyboardState(nullptr);
+        const Uint8 *key_states = SDL_GetKeyboardState(nullptr);
         if (key_states[SDL_SCANCODE_LEFT]) player.move(-1);
         if (key_states[SDL_SCANCODE_RIGHT]) player.move(1);
-        if (key_states[SDL_SCANCODE_UP]) player.jump();
+        if (key_states[SDL_SCANCODE_UP]) {
+            player.jump();
+            Mix_PlayChannel(-1, snd, 0);
+        }
 
         SDL_SetRenderDrawColor(renderer, 0, 0, 50, 0);
         SDL_RenderClear(renderer);
@@ -134,6 +142,7 @@ int main(int arc, char *argv[]) {
         SDL_Delay(50);
     }
 
+    Mix_FreeChunk(snd);
     SDL_DestroyTexture(spritesheet);
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
